@@ -4,7 +4,7 @@ Plugin Name: WPEmail Tester
 Plugin URI: https://github.com/GitStudying/WPmail-tester
 Description: Sends a scheduled test email to a specified address with customizable frequency.
 Version: 0.0.5
-Author: nanoPost
+Author: GitStudying
 Text Domain: wpemail-tester
 Author URI: 
 License: GPLv2 or later

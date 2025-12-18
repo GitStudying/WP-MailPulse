@@ -1,50 +1,66 @@
 <?php
 /*
-Plugin Name: Daily Email Tester
-Plugin URI: https://github.com/nanopost/daily-email-tester.php
+Plugin Name: WPEmail Tester
+Plugin URI: https://github.com/GitStudying/WPmail-tester
 Description: Sends a scheduled test email to a specified address with customizable frequency.
-Version: 0.0.4
+Version: 0.0.5
 Author: nanoPost
-Text Domain: daily-email-tester
-Author URI: https://nanopo.st/
+Text Domain: wpemail-tester
+Author URI: 
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 */
 
-// 1. ACTIVATION: Schedule with default settings
-register_activation_hook( __FILE__, 'dailytester_activate' );
-function dailytester_activate() {
-    dailytester_reschedule_cron();
+// 1. ACTIVATION
+register_activation_hook( __FILE__, 'tester_activate' );
+function tester_activate() {
+    tester_reschedule_cron();
 }
 
-// 2. DEACTIVATION: Clear schedule
-register_deactivation_hook( __FILE__, 'dailytester_deactivate' );
-function dailytester_deactivate() {
-    wp_clear_scheduled_hook( 'dailytester_send_daily_email' );
+// 2. DEACTIVATION
+register_deactivation_hook( __FILE__, 'tester_deactivate' );
+function tester_deactivate() {
+    wp_clear_scheduled_hook( 'tester_send_frequent_email' );
 }
 
-// 3. ADD CUSTOM CRON SCHEDULES
-// WordPress has hourly, twicedaily, daily. We need weekly/monthly/custom.
-add_filter( 'cron_schedules', 'dailytester_add_cron_intervals' );
-function dailytester_add_cron_intervals( $schedules ) {
+// 3. HELPER: Get seconds based on frequency setting
+// Dit helpt ons om de exacte tijd in seconden te berekenen voor de volgende run
+function dailytester_get_seconds() {
+    $freq = get_option( 'tester_frequency', 'daily' );
     
-    // Weekly
+    switch ( $freq ) {
+        case 'weekly':
+            return 604800; // 7 dagen
+        case 'monthly':
+            return 2592000; // 30 dagen (gemiddeld)
+        case 'tester_custom':
+            $days = get_option( 'tester_custom_days', 3 );
+            return $days * 86400;
+        case 'daily':
+        default:
+            return 86400; // 1 dag
+    }
+}
+
+// 4. ADD CUSTOM CRON SCHEDULES
+add_filter( 'cron_schedules', 'tester_add_cron_intervals' );
+function tester_add_cron_intervals( $schedules ) {
+    
     $schedules['weekly'] = array(
-        'interval' => 604800, // 7 * 24 * 60 * 60
+        'interval' => 604800,
         'display'  => __( 'Once Weekly' )
     );
     
-    // Monthly (approx 30 days)
     $schedules['monthly'] = array(
-        'interval' => 2592000, // 30 * 24 * 60 * 60
+        'interval' => 2592000,
         'display'  => __( 'Once Monthly' )
     );
 
-    // Custom Days (Dynamic)
-    $custom_days = get_option( 'dailytester_custom_days', 3 ); // Default to 3 days if not set
+    // Custom Days
+    $custom_days = get_option( 'tester_custom_days', 3 );
     if ( $custom_days > 0 ) {
-        $schedules['dailytester_custom'] = array(
-            'interval' => $custom_days * 86400, // days * 24 * 60 * 60
+        $schedules['tester_custom'] = array(
+            'interval' => $custom_days * 86400,
             'display'  => __( 'Every ' . $custom_days . ' days' )
         );
     }
@@ -52,34 +68,34 @@ function dailytester_add_cron_intervals( $schedules ) {
     return $schedules;
 }
 
-// 4. ACTION HOOK
-add_action( 'dailytester_send_daily_email', 'dailytester_send_email' );
+// 5. ACTION HOOK
+add_action( 'tester_send_frequent_email', 'tester_send_email' );
 
-// 5. ADMIN MENU
-function dailytester_add_options_page() {
+// 6. ADMIN MENU
+function tester_add_options_page() {
     add_submenu_page(
         'tools.php',
         'Email Tester Settings',
         'Email Tester',
         'manage_options',
-        'dailytester_options',
+        'tester_options',
         'dailytester_render_options_page'
     );
 }
-add_action( 'admin_menu', 'dailytester_add_options_page' );
+add_action( 'admin_menu', 'tester_add_options_page' );
 
-// 6. RENDER OPTIONS PAGE
+// 7. RENDER OPTIONS PAGE
 function dailytester_render_options_page() {    
     ?>    
     <div class="wrap">    
         <h2>Email Tester Settings</h2>
 
         <?php 
-        // --- LOGICA VOOR TEST MAIL ---
-        if ( isset( $_POST['dailytester_send_test_email'] ) ) {    
-            if ( check_admin_referer( 'dailytester_send_test_email', 'dailytester_send_test_email_nonce' ) ) {    
+        // --- LOGICA VOOR HANDMATIGE TEST MAIL ---
+        if ( isset( $_POST['tester_send_test_email'] ) ) {    
+            if ( check_admin_referer( 'tester_send_test_email', 'tester_send_test_email_nonce' ) ) {    
                 
-                $target_email = get_option( 'dailytester_email_address' );
+                $target_email = get_option( 'tester_email_address' );
 
                 if ( empty( $target_email ) ) {
                     ?>
@@ -88,11 +104,11 @@ function dailytester_render_options_page() {
                     </div>
                     <?php
                 } else {
-                    $sent = dailytester_send_email( true );        
+                    $sent = tester_send_email( true );        
                     if ( $sent ){
                         ?>
                         <div class="notice notice-success is-dismissible">
-                            <p>Test email sent successfully to <?php echo esc_html($target_email); ?>!</p>
+                            <p>Manual test email sent successfully to <?php echo esc_html($target_email); ?>!</p>
                         </div>
                         <?php
                     } else {
@@ -106,117 +122,128 @@ function dailytester_render_options_page() {
             }
         }
         
-        // --- CHECK SCHEDULER ---
-        // We tonen de volgende geplande tijd ter info
-        $next_run = wp_next_scheduled( 'dailytester_send_daily_email' );
+        // --- CHECK SCHEDULER & DISPLAY INFO ---
+        $next_run = wp_next_scheduled( 'tester_send_frequent_email' );
+        $freq_setting = get_option( 'tester_frequency', 'daily' );
+        
         if ( $next_run ) {
             $time_string = date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $next_run );
+            
+            // Bereken de resterende tijd voor de weergave
+            $time_diff = human_time_diff( time(), $next_run );
+            
             ?>
             <div class="notice notice-info inline">
-                <p>Next automatic email scheduled for: <strong><?php echo $time_string; ?></strong></p>
+                <p>
+                    <strong>Status:</strong> Active<br>
+                    <strong>Frequency:</strong> <?php echo esc_html($freq_setting); ?><br>
+                    <strong>Next automatic email:</strong> <?php echo $time_string; ?> (in <?php echo $time_diff; ?>)
+                </p>
             </div>
             <?php
         } else {
              ?>
             <div class="notice notice-warning inline">
-                <p>No active schedule found. Save settings to activate.</p>
+                <p>No active schedule found. Please save your settings to activate the scheduler.</p>
             </div>
             <?php
         }
         ?>
 
         <form method="post" action="options.php">
-            <?php settings_fields( 'dailytester_options' ); ?>    
-            <?php do_settings_sections( 'dailytester_options' ); ?>    
+            <?php settings_fields( 'tester_options' ); ?>    
+            <?php do_settings_sections( 'tester_options' ); ?>    
             
             <table class="form-table">    
                 <tr>    
-                    <th scope="row"><label for="dailytester_email_address">Email Address</label></th>    
+                    <th scope="row"><label for="tester_email_address">Email Address</label></th>    
                     <td>
-                        <input type="email" id="dailytester_email_address" name="dailytester_email_address" value="<?php echo esc_attr( get_option( 'dailytester_email_address' ) ); ?>" class="regular-text" placeholder="e.g. info@example.com" required />
+                        <input type="email" id="tester_email_address" name="tester_email_address" value="<?php echo esc_attr( get_option( 'tester_email_address' ) ); ?>" class="regular-text" placeholder="e.g. info@example.com" required />
                     </td>    
                 </tr>
 
-                <?php $current_freq = get_option( 'dailytester_frequency', 'daily' ); ?>
+                <?php $current_freq = get_option( 'tester_frequency', 'daily' ); ?>
                 <tr>
-                    <th scope="row"><label for="dailytester_frequency">Frequency</label></th>
+                    <th scope="row"><label for="tester_frequency">Frequency</label></th>
                     <td>
-                        <select name="dailytester_frequency" id="dailytester_frequency">
-                            <option value="daily" <?php selected( $current_freq, 'daily' ); ?>>Daily</option>
-                            <option value="weekly" <?php selected( $current_freq, 'weekly' ); ?>>Weekly</option>
-                            <option value="monthly" <?php selected( $current_freq, 'monthly' ); ?>>Monthly</option>
-                            <option value="dailytester_custom" <?php selected( $current_freq, 'dailytester_custom' ); ?>>Custom (Days)</option>
+                        <select name="tester_frequency" id="tester_frequency">
+                            <option value="daily" <?php selected( $current_freq, 'daily' ); ?>>Daily (24 hours)</option>
+                            <option value="weekly" <?php selected( $current_freq, 'weekly' ); ?>>Weekly (7 days)</option>
+                            <option value="monthly" <?php selected( $current_freq, 'monthly' ); ?>>Monthly (30 days)</option>
+                            <option value="tester_custom" <?php selected( $current_freq, 'tester_custom' ); ?>>Custom Days...</option>
                         </select>
                     </td>
                 </tr>
 
                 <tr>
-                    <th scope="row"><label for="dailytester_custom_days">Custom Interval (Days)</label></th>
+                    <th scope="row"><label for="tester_custom_days">Custom Interval (Days)</label></th>
                     <td>
-                        <input type="number" min="1" step="1" id="dailytester_custom_days" name="dailytester_custom_days" value="<?php echo esc_attr( get_option( 'dailytester_custom_days', 3 ) ); ?>" class="small-text" />
-                        <p class="description">Only used if "Custom (Days)" is selected above.</p>
+                        <input type="number" min="1" step="1" id="tester_custom_days" name="tester_custom_days" value="<?php echo esc_attr( get_option( 'tester_custom_days', 3 ) ); ?>" class="small-text" />
+                        <p class="description">Only used if "Custom Days" is selected above.</p>
                     </td>
                 </tr>
             </table>    
-            <?php submit_button( 'Save Changes' ); ?>    
+            <?php submit_button( 'Save Settings & Update Schedule' ); ?>    
         </form>
 
         <hr />    
 
         <form method="post">
             <h3>Test Email</h3>    
-            <p>Send a manual test immediately:</p>    
-            <?php wp_nonce_field( 'dailytester_send_test_email', 'dailytester_send_test_email_nonce' ); ?>    
-            <?php submit_button( 'Send Test Email Now', 'secondary', 'dailytester_send_test_email', false ); ?>    
+            <p>Send a manual test immediately (does not affect the schedule):</p>    
+            <?php wp_nonce_field( 'tester_send_test_email', 'tester_send_test_email_nonce' ); ?>    
+            <?php submit_button( 'Send Test Email Now', 'secondary', 'tester_send_test_email', false ); ?>    
         </form>    
     </div>    
     <?php    
 }
 
-// 7. REGISTER SETTINGS
+// 8. REGISTER SETTINGS
 add_action( 'admin_init', 'dailytester_register_settings' );    
 function dailytester_register_settings() {    
-    // Register settings
-    register_setting( 'dailytester_options', 'dailytester_email_address', 'sanitize_email' );
+    register_setting( 'tester_options', 'tester_email_address', 'sanitize_email' );
     
-    // Register Frequency with a callback to reschedule immediately upon save
-    register_setting( 'dailytester_options', 'dailytester_frequency', array(
+    register_setting( 'tester_options', 'tester_frequency', array(
         'sanitize_callback' => 'sanitize_text_field',
     ));
 
-    register_setting( 'dailytester_options', 'dailytester_custom_days', array(
+    register_setting( 'tester_options', 'tester_custom_days', array(
         'sanitize_callback' => 'absint'
     ));
 }   
 
-// 8. HOOK INTO OPTION UPDATE TO RESCHEDULE
-// Wanneer de opties worden opgeslagen in options.php, moeten we de cron job herplannen.
-add_action( 'update_option_dailytester_frequency', 'dailytester_reschedule_cron', 10, 0 );
-add_action( 'update_option_dailytester_custom_days', 'dailytester_reschedule_cron', 10, 0 );
+// 9. HOOK INTO OPTION UPDATE TO RESCHEDULE
+add_action( 'update_option_dailytester_frequency', 'tester_reschedule_cron', 10, 0 );
+add_action( 'update_option_tester_custom_days', 'tester_reschedule_cron', 10, 0 );
+add_action( 'update_option_tester_email_address', 'tester_reschedule_cron', 10, 0 );
 
-function dailytester_reschedule_cron() {
-    // Verwijder oude schedule
-    wp_clear_scheduled_hook( 'dailytester_send_daily_email' );
+function tester_reschedule_cron() {
+    // 1. Verwijder altijd eerst de oude taak
+    wp_clear_scheduled_hook( 'tester_send_frequent_email' );
 
-    // Haal instellingen op
-    $freq = get_option( 'dailytester_frequency', 'daily' );
-    
-    // Als er geen email is ingesteld, plannen we niets in
-    $email = get_option( 'dailytester_email_address' );
+    // 2. Als er geen email is, stoppen we (geen taak plannen)
+    $email = get_option( 'tester_email_address' );
     if ( empty( $email ) ) return;
 
-    // Schedule nieuwe event
-    // Note: Als het custom is, moet de 'cron_schedules' filter (stap 3) al gedraaid hebben.
-    wp_schedule_event( time(), $freq, 'dailytester_send_daily_email' );
+    // 3. Haal frequentie instelling op
+    $freq = get_option( 'tester_frequency', 'daily' );
+    
+    // 4. Haal exacte seconden op (via helper functie)
+    $seconds = dailytester_get_seconds();
+
+    // 5. Plan de taak in de TOEKOMST
+    // We gebruiken time() + $seconds. 
+    // Dus als je opslaat op Dinsdag 12:00 en kiest voor "Daily", wordt de eerste mail Woensdag 12:00 verstuurd.
+    wp_schedule_event( time() + $seconds, $freq, 'tester_send_frequent_email' );
 }
 
-// 9. SEND EMAIL FUNCTION
-function dailytester_send_email( $interactive = false ) {
+// 10. SEND EMAIL FUNCTION
+function tester_send_email( $interactive = false ) {
   
-    $to = get_option( 'dailytester_email_address' );
+    $to = get_option( 'tester_email_address' );
     if ( empty( $to ) ) return false;
     
-    $freq = get_option( 'dailytester_frequency', 'daily' );
+    $freq = get_option( 'tester_frequency', 'daily' );
     
     if( $interactive ){
         $subject = 'Test message from '. get_bloginfo( 'name' ) . ' (manual)';

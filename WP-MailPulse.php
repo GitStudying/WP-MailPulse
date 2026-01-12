@@ -1,11 +1,11 @@
 <?php
 /*
-Plugin Name: WPEmail Tester
+Plugin Name: WP-MailPulse
 Plugin URI: https://github.com/GitStudying/WPmail-tester
 Description: Sends a scheduled test email to a specified address with customizable frequency.
-Version: 0.0.6
+Version: 0.0.7
 Author: GitStudying
-Text Domain: wpemail-tester
+Text Domain: WP-MailPulse
 Author URI: 
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
@@ -88,8 +88,8 @@ add_action( 'tester_send_frequent_email', 'tester_send_email' );
 function tester_add_options_page() {
     add_submenu_page(
         'tools.php',
-        'Email Tester Settings',
-        'Email Tester',
+        'WP MailPulse - Email Tester Settings',
+        'WP MailPulse - Email Tester',
         'manage_options',
         'tester_options',
         'tester_render_options_page'
@@ -101,7 +101,7 @@ add_action( 'admin_menu', 'tester_add_options_page' );
 function tester_render_options_page() {    
     ?>    
     <div class="wrap">    
-        <h2>Email Tester Settings</h2>
+        <h2>WP MailPulse - Email Tester Settings</h2>
 
         <?php 
         // --- LOGICA VOOR HANDMATIGE TEST MAIL ---
@@ -262,7 +262,7 @@ function tester_send_email( $interactive = false ) {
         $subject = 'Scheduled test message from '. get_bloginfo( 'name' ) . ' (' . $freq . ')';
         $message = 'This is a scheduled email test. Current frequency setting: ' . $freq;
         if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-            error_log( '[Email Tester] Sending scheduled email to ' . $to );
+            error_log( '[WP MailPulse - Email Tester] Sending scheduled email to ' . $to );
         }
     }
   
